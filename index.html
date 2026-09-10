@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scan Barcode Alat</title>
-  <!-- Menggunakan Library Scanner Resmi HTML5 yang Mendukung Barcode & QR -->
-  <script src="https://unpkg.com"></script>
+  <title>Scan Barcode Alat (ZXing)</title>
+  <!-- MEMANGGIL LIBRARY PUSAT ZXING-JS RESMI & TERBARU -->
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     body { font-family: Arial, sans-serif; background-color: #F5F5F5; text-align: center; padding: 20px; }
     .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 20px; }
@@ -20,24 +20,19 @@
 
 <div class="container">
   <h2>PEMAKAIAN ALAT</h2>
-  <p style="font-family: monospace; font-weight: bold; color: #555;">Input and Scan</p>
+  <p style="font-family: monospace; font-weight: bold; color: #555;">Powered by ZXing-JS</p>
   
   <input type="text" id="username" placeholder="Input your name">
-  
-  <!-- Tombol pemicu kamera native HP yang 100% diizinkan oleh sistem Android & iOS -->
   <button class="btn-scan" onclick="pemicuKameraHP()">📷 Ambil Foto Barcode</button>
   
-  <!-- Input tersembunyi yang mengaktifkan kamera belakang HP secara otomatis -->
-  <input type="file" id="hidden-input" accept="image/*" capture="environment" onchange="prosesGambarBarcode(event)">
+  <!-- Kamera Bawaan Sistem HP (100% Lolos Blokir Keamanan Browser) -->
+  <input type="file" id="hidden-input" accept="image/*" capture="environment" onchange="prosesGambarZXing(event)">
   
   <div id="status-pesan" class="status"></div>
-  
-  <!-- Elemen tersembunyi wajib sebagai mesin pembaca gambar oleh library -->
-  <div id="reader" style="display: none; width: 100px; height: 100px;"></div>
 </div>
 
 <script>
-  // URL exec Apps Script milik Anda yang valid
+  // URL exec Apps Script Anda yang valid
   const URL_APPS_SCRIPT = "https://google.com";
 
   function pemicuKameraHP() {
@@ -46,48 +41,57 @@
       alert("Isi Nama Pengguna Terlebih Dahulu!");
       return;
     }
-    // Klik otomatis input file kamera native
     document.getElementById("hidden-input").click();
   }
 
-  function prosesGambarBarcode(event) {
+  function prosesGambarZXing(event) {
     let namaUser = document.getElementById("username").value;
     
-    // PERBAIKAN 1: Memastikan file gambar terambil dengan benar (bukan list kosong)
     if (event.target.files.length === 0) return;
-    const imageFile = event.target.files[0]; // Mengambil target file gambar tunggal
+    const file = event.target.files[0]; // Mengambil file foto murni yang dijepret
 
-    document.getElementById("status-pesan").innerText = "Membaca gambar barcode...";
+    document.getElementById("status-pesan").innerText = "ZXing sedang membaca barcode...";
 
-    // Menginisialisasi sistem scanner gambar murni HTML5
-    const html5QrCode = new Html5Qrcode("reader");
-    
-    // PERBAIKAN 2: Mengirimkan imageFile murni yang valid ke fungsi scanFile
-    html5QrCode.scanFile(imageFile, false) // false artinya tidak perlu menampilkan gambar di layar
-      .then(decodedText => {
+    // 1. Mengubah file gambar jepretan kamera menjadi URL objek sementara di browser
+    const pembuatUrlGambar = URL.createObjectURL(file);
+
+    // 2. Menginisialisasi Mesin Pembaca Multi-Format milik ZXing-JS
+    const pembacaZxing = new ZXing.BrowserMultiFormatReader();
+
+    // 3. Menjalankan fungsi dekode mandiri berbasis URL gambar jepretan
+    pembacaZxing.decodeFromImageUrl(pembuatUrlGambar)
+      .then(result => {
+        // Jika ZXing berhasil mendeteksi Barcode/QR Code
+        const teksBarcode = result.text;
         document.getElementById("status-pesan").innerText = "Sedang mencatat data...";
-        
+
         // Kirim hasil teks ke Google Sheets via Fetch API
-        fetch(`${URL_APPS_SCRIPT}?id_alat=${encodeURIComponent(decodedText)}&user=${encodeURIComponent(namaUser)}`)
+        fetch(`${URL_APPS_SCRIPT}?id_alat=${encodeURIComponent(teksBarcode)}&user=${encodeURIComponent(namaUser)}`)
           .then(response => response.text())
           .then(responseText => {
              document.getElementById("status-pesan").innerText = responseText;
              alert(responseText);
-             document.getElementById("status-pesan").innerText = "";
-             document.getElementById("hidden-input").value = ""; // Reset input kamera
+             bersihkanInput();
           })
           .catch(error => {
              document.getElementById("status-pesan").innerText = "Gagal mengirim data ke Sheets!";
              console.error(error);
-             document.getElementById("hidden-input").value = "";
+             bersihkanInput();
           });
       })
       .catch(err => {
-        document.getElementById("status-pesan").innerText = "Barcode tidak terdeteksi! Coba foto lebih dekat dan fokus.";
-        alert("Gagal membaca barcode. Pastikan foto tegak lurus, fokus, terang, dan dekat dengan objek!");
-        document.getElementById("hidden-input").value = "";
-        console.log("Error scan:", err);
+        // Jika gambar buram, tidak fokus, atau bukan gambar barcode
+        document.getElementById("status-pesan").innerText = "Barcode tidak terbaca! Pastikan foto lurus dan fokus.";
+        alert("ZXing gagal mendeteksi kode. Tips: Ambil foto barcode dari jarak sekitar 20cm (jangan terlalu dekat agar tidak buram) dan pastikan pencahayaannya terang!");
+        bersihkanInput();
+        console.error("Detail Eror ZXing:", err);
       });
+
+    // Fungsi pembersihan memori objek setelah selesai digunakan
+    function bersihkanInput() {
+      URL.revokeObjectURL(pembuatUrlGambar); // Menghapus URL objek sementara dari memori browser
+      document.getElementById("hidden-input").value = ""; // Mengosongkan pemicu kamera
+    }
   }
 </script>
 </body>
