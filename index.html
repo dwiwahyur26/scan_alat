@@ -3,95 +3,153 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scan Barcode Alat (ZXing)</title>
-  <!-- MEMANGGIL LIBRARY PUSAT ZXING-JS RESMI & TERBARU -->
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
+  <title>Scan Barcode Alat Live</title>
+  <!-- MEMANGGIL LIBRARY TERBARU PERANGKAT BROWSER ZXING-JS -->
+  <script type="text/javascript" src="https://unpkg.com/@zxing/browser@latest"></script>
   <style>
     body { font-family: Arial, sans-serif; background-color: #F5F5F5; text-align: center; padding: 20px; }
     .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 20px; }
     h2 { color: #2F52CD; margin-bottom: 5px; }
     input[type="text"] { width: 80%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; text-align: center; font-size: 16px; box-sizing: border-box; }
     .status { color: #2F52CD; font-weight: bold; margin-top: 15px; font-size: 16px; min-height: 24px; }
-    .btn-scan { background-color: #2F52CD; color: white; padding: 14px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 80%; margin-top: 10px; display: inline-block; }
-    #hidden-input { display: none; }
+    .btn-scan { background-color: #2F52CD; color: white; padding: 14px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 80%; margin-top: 10px; }
+    .btn-danger { background-color: #d9534f; }
+    
+    /* Area Kotak Kamera Live View */
+    #scanner-container { width: 100%; border-radius: 12px; overflow: hidden; margin-top: 15px; background: #000; display: none; position: relative; }
+    video { width: 100%; height: auto; display: block; transform: scaleX(1); }
+    select { width: 80%; padding: 8px; margin-top: 10px; border-radius: 6px; font-size: 14px; display: none; }
   </style>
 </head>
 <body>
 
 <div class="container">
   <h2>PEMAKAIAN ALAT</h2>
-  <p style="font-family: monospace; font-weight: bold; color: #555;">Powered by ZXing-JS</p>
+  <p style="font-family: monospace; font-weight: bold; color: #555;">Live Video Scanner</p>
   
   <input type="text" id="username" placeholder="Input your name">
-  <button class="btn-scan" onclick="pemicuKameraHP()">📷 Ambil Foto Barcode</button>
   
-  <!-- Kamera Bawaan Sistem HP (100% Lolos Blokir Keamanan Browser) -->
-  <input type="file" id="hidden-input" accept="image/*" capture="environment" onchange="prosesGambarZXing(event)">
+  <!-- Tombol Kendali Kamera -->
+  <button id="btn-start" class="btn-scan" onclick="inisialisasiKameraLive()">📷 Mulai Scan Kamera</button>
+  <button id="btn-stop" class="btn-scan btn-danger" onclick="hentikanKameraLive()" style="display: none;">🛑 Matikan Kamera</button>
+  
+  <!-- Pilihan Menu Kamera HP (Jika Kamera Belakang Lebih dari Satu) -->
+  <select id="sourceSelect" onchange="gantiKamera(this.value)"></select>
+  
+  <!-- Kotak Jendela Tampilan Kamera Aktif -->
+  <div id="scanner-container">
+    <video id="video-preview"></video>
+  </div>
   
   <div id="status-pesan" class="status"></div>
 </div>
 
 <script>
-  // URL exec Apps Script Anda yang valid
+  // URL exec Apps Script milik Anda yang valid
   const URL_APPS_SCRIPT = "https://google.com";
 
-  function pemicuKameraHP() {
+  // Inisialisasi Mesin Pembaca Kode Batang Utama dari ZXing Browser
+  const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+  let kontrolKamera = null;
+  let daftarKamera = [];
+
+  async function inisialisasiKameraLive() {
     let namaUser = document.getElementById("username").value;
     if (!namaUser) {
       alert("Isi Nama Pengguna Terlebih Dahulu!");
       return;
     }
-    document.getElementById("hidden-input").click();
+
+    document.getElementById("status-pesan").innerText = "Meminta izin akses kamera...";
+    
+    try {
+      // 1. Meminta izin browser dan memuat seluruh perangkat lensa kamera HP
+      daftarKamera = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
+      
+      if (daftarKamera.length === 0) {
+        document.getElementById("status-pesan").innerText = "Kamera tidak ditemukan!";
+        return;
+      }
+
+      // Menampilkan elemen visual scanner di layar web
+      document.getElementById("scanner-container").style.display = "block";
+      document.getElementById("btn-start").style.display = "none";
+      document.getElementById("btn-stop").style.display = "inline-block";
+      document.getElementById("status-pesan").innerText = "Arahkan kamera ke Barcode/QR Code";
+
+      // 2. Mengatur pilihan menu kamera (khusus HP multi-lensa)
+      const menuKamera = document.getElementById('sourceSelect');
+      menuKamera.innerHTML = '';
+      if (daftarKamera.length > 1) {
+        menuKamera.style.display = 'inline-block';
+        daftarKamera.forEach((device, index) => {
+          const opsi = document.createElement('option');
+          opsi.value = device.deviceId;
+          opsi.text = device.label || `Kamera ${index + 1}`;
+          // Otomatis memilih kamera belakang (biasanya ada kata 'back' atau 'environment')
+          if (device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('environment')) {
+            opsi.selected = true;
+          }
+          menuKamera.appendChild(opsi);
+        });
+      }
+
+      // 3. Menyalakan aliran video lensa terpilih
+      gantiKamera(menuKamera.value || daftarKamera[0].deviceId);
+
+    } catch (error) {
+      document.getElementById("status-pesan").innerText = "Gagal membuka kamera!";
+      console.error(error);
+      alert("Harap berikan izin akses kamera pada pop-up browser Anda!");
+    }
   }
 
-  function prosesGambarZXing(event) {
+  async function gantiKamera(deviceId) {
+    // Matikan scanner lama jika sedang berjalan sebelum berpindah lensa
+    if (kontrolKamera) { kontrolKamera.stop(); }
+
+    const elemenVideo = document.getElementById('video-preview');
     let namaUser = document.getElementById("username").value;
-    
-    if (event.target.files.length === 0) return;
-    const file = event.target.files[0]; // Mengambil file foto murni yang dijepret
 
-    document.getElementById("status-pesan").innerText = "ZXing sedang membaca barcode...";
-
-    // 1. Mengubah file gambar jepretan kamera menjadi URL objek sementara di browser
-    const pembuatUrlGambar = URL.createObjectURL(file);
-
-    // 2. Menginisialisasi Mesin Pembaca Multi-Format milik ZXing-JS
-    const pembacaZxing = new ZXing.BrowserMultiFormatReader();
-
-    // 3. Menjalankan fungsi dekode mandiri berbasis URL gambar jepretan
-    pembacaZxing.decodeFromImageUrl(pembuatUrlGambar)
-      .then(result => {
-        // Jika ZXing berhasil mendeteksi Barcode/QR Code
-        const teksBarcode = result.text;
+    // 4. Proses scanning video live secara berkelanjutan (Continuous Scanning)
+    kontrolKamera = await codeReader.decodeFromVideoDevice(deviceId, elemenVideo, (result, error) => {
+      if (result) {
+        // Jika ZXing mendeteksi Barcode atau QR Code secara live
+        console.log("Terbaca:", result.text);
+        
+        // Hentikan video stream agar tidak mengirim data berkali-kali ke Sheets
+        hentikanKameraLive();
         document.getElementById("status-pesan").innerText = "Sedang mencatat data...";
 
-        // Kirim hasil teks ke Google Sheets via Fetch API
-        fetch(`${URL_APPS_SCRIPT}?id_alat=${encodeURIComponent(teksBarcode)}&user=${encodeURIComponent(namaUser)}`)
+        // Mengirimkan hasil scan langsung ke Google Sheets via Fetch API
+        fetch(`${URL_APPS_SCRIPT}?id_alat=${encodeURIComponent(result.text)}&user=${encodeURIComponent(namaUser)}`)
           .then(response => response.text())
           .then(responseText => {
              document.getElementById("status-pesan").innerText = responseText;
              alert(responseText);
-             bersihkanInput();
+             document.getElementById("status-pesan").innerText = "";
           })
-          .catch(error => {
+          .catch(err => {
              document.getElementById("status-pesan").innerText = "Gagal mengirim data ke Sheets!";
-             console.error(error);
-             bersihkanInput();
+             console.error(err);
           });
-      })
-      .catch(err => {
-        // Jika gambar buram, tidak fokus, atau bukan gambar barcode
-        document.getElementById("status-pesan").innerText = "Barcode tidak terbaca! Pastikan foto lurus dan fokus.";
-        alert("ZXing gagal mendeteksi kode. Tips: Ambil foto barcode dari jarak sekitar 20cm (jangan terlalu dekat agar tidak buram) dan pastikan pencahayaannya terang!");
-        bersihkanInput();
-        console.error("Detail Eror ZXing:", err);
-      });
+      }
+      if (error && !(error instanceof ZXing.NotFoundException)) {
+        console.error("Eror Scanner:", error);
+      }
+    });
+  }
 
-    // Fungsi pembersihan memori objek setelah selesai digunakan
-    function bersihkanInput() {
-      URL.revokeObjectURL(pembuatUrlGambar); // Menghapus URL objek sementara dari memori browser
-      document.getElementById("hidden-input").value = ""; // Mengosongkan pemicu kamera
+  function hentikanKameraLive() {
+    if (kontrolKamera) {
+      kontrolKamera.stop(); // Mematikan lampu lensa dan aliran video stream
+      kontrolKamera = null;
     }
+    document.getElementById("scanner-container").style.display = "none";
+    document.getElementById("sourceSelect").style.display = "none";
+    document.getElementById("btn-start").style.display = "inline-block";
+    document.getElementById("btn-stop").style.display = "none";
+    document.getElementById("status-pesan").innerText = "";
   }
 </script>
 </body>
