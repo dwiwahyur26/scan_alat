@@ -1,156 +1,59 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scan Barcode Alat Live</title>
-  <!-- MEMANGGIL LIBRARY TERBARU PERANGKAT BROWSER ZXING-JS -->
-  <script type="text/javascript" src="https://unpkg.com/@zxing/browser@latest"></script>
-  <style>
-    body { font-family: Arial, sans-serif; background-color: #F5F5F5; text-align: center; padding: 20px; }
-    .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 20px; }
-    h2 { color: #2F52CD; margin-bottom: 5px; }
-    input[type="text"] { width: 80%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; text-align: center; font-size: 16px; box-sizing: border-box; }
-    .status { color: #2F52CD; font-weight: bold; margin-top: 15px; font-size: 16px; min-height: 24px; }
-    .btn-scan { background-color: #2F52CD; color: white; padding: 14px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 80%; margin-top: 10px; }
-    .btn-danger { background-color: #d9534f; }
-    
-    /* Area Kotak Kamera Live View */
-    #scanner-container { width: 100%; border-radius: 12px; overflow: hidden; margin-top: 15px; background: #000; display: none; position: relative; }
-    video { width: 100%; height: auto; display: block; transform: scaleX(1); }
-    select { width: 80%; padding: 8px; margin-top: 10px; border-radius: 6px; font-size: 14px; display: none; }
-  </style>
-</head>
-<body>
-
-<div class="container">
-  <h2>PEMAKAIAN ALAT</h2>
-  <p style="font-family: monospace; font-weight: bold; color: #555;">Live Video Scanner</p>
-  
-  <input type="text" id="username" placeholder="Input your name">
-  
-  <!-- Tombol Kendali Kamera -->
-  <button id="btn-start" class="btn-scan" onclick="inisialisasiKameraLive()">📷 Mulai Scan Kamera</button>
-  <button id="btn-stop" class="btn-scan btn-danger" onclick="hentikanKameraLive()" style="display: none;">🛑 Matikan Kamera</button>
-  
-  <!-- Pilihan Menu Kamera HP (Jika Kamera Belakang Lebih dari Satu) -->
-  <select id="sourceSelect" onchange="gantiKamera(this.value)"></select>
-  
-  <!-- Kotak Jendela Tampilan Kamera Aktif -->
-  <div id="scanner-container">
-    <video id="video-preview"></video>
-  </div>
-  
-  <div id="status-pesan" class="status"></div>
-</div>
-
-<script>
-  // URL exec Apps Script milik Anda yang valid
-  const URL_APPS_SCRIPT = "https://google.com";
-
-  // Inisialisasi Mesin Pembaca Kode Batang Utama dari ZXing Browser
-  const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
-  let kontrolKamera = null;
-  let daftarKamera = [];
-
-  async function inisialisasiKameraLive() {
-    let namaUser = document.getElementById("username").value;
-    if (!namaUser) {
-      alert("Isi Nama Pengguna Terlebih Dahulu!");
-      return;
-    }
-
-    document.getElementById("status-pesan").innerText = "Meminta izin akses kamera...";
-    
-    try {
-      // 1. Meminta izin browser dan memuat seluruh perangkat lensa kamera HP
-      daftarKamera = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
-      
-      if (daftarKamera.length === 0) {
-        document.getElementById("status-pesan").innerText = "Kamera tidak ditemukan!";
-        return;
-      }
-
-      // Menampilkan elemen visual scanner di layar web
-      document.getElementById("scanner-container").style.display = "block";
-      document.getElementById("btn-start").style.display = "none";
-      document.getElementById("btn-stop").style.display = "inline-block";
-      document.getElementById("status-pesan").innerText = "Arahkan kamera ke Barcode/QR Code";
-
-      // 2. Mengatur pilihan menu kamera (khusus HP multi-lensa)
-      const menuKamera = document.getElementById('sourceSelect');
-      menuKamera.innerHTML = '';
-      if (daftarKamera.length > 1) {
-        menuKamera.style.display = 'inline-block';
-        daftarKamera.forEach((device, index) => {
-          const opsi = document.createElement('option');
-          opsi.value = device.deviceId;
-          opsi.text = device.label || `Kamera ${index + 1}`;
-          // Otomatis memilih kamera belakang (biasanya ada kata 'back' atau 'environment')
-          if (device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('environment')) {
-            opsi.selected = true;
-          }
-          menuKamera.appendChild(opsi);
-        });
-      }
-
-      // 3. Menyalakan aliran video lensa terpilih
-      gantiKamera(menuKamera.value || daftarKamera[0].deviceId);
-
-    } catch (error) {
-      document.getElementById("status-pesan").innerText = "Gagal membuka kamera!";
-      console.error(error);
-      alert("Harap berikan izin akses kamera pada pop-up browser Anda!");
-    }
-  }
-
   async function gantiKamera(deviceId) {
-    // Matikan scanner lama jika sedang berjalan sebelum berpindah lensa
     if (kontrolKamera) { kontrolKamera.stop(); }
 
     const elemenVideo = document.getElementById('video-preview');
     let namaUser = document.getElementById("username").value;
 
-    // 4. Proses scanning video live secara berkelanjutan (Continuous Scanning)
-    kontrolKamera = await codeReader.decodeFromVideoDevice(deviceId, elemenVideo, (result, error) => {
-      if (result) {
-        // Jika ZXing mendeteksi Barcode atau QR Code secara live
-        console.log("Terbaca:", result.text);
+    // PERBAIKAN UTAMA: Mengunci resolusi standar agar video tidak blank hitam di HP
+    const opsiKoneksi = {
+      deviceId: deviceId,
+      modifiers: {
+        constraints: {
+          video: {
+            deviceId: deviceId,
+            facingMode: "environment",
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          },
+          audio: false
+        }
+      }
+    };
+
+    document.getElementById("status-pesan").innerText = "Menghubungkan ke lensa kamera...";
+
+    try {
+      // Menjalankan proses scanning dengan resolusi yang sudah dikunci aman
+      kontrolKamera = await codeReader.decodeFromVideoDevice(opsiKoneksi, elemenVideo, (result, error) => {
+        if (result) {
+          console.log("Terbaca:", result.text);
+          hentikanKameraLive();
+          document.getElementById("status-pesan").innerText = "Sedang mencatat data...";
+
+          fetch(`${URL_APPS_SCRIPT}?id_alat=${encodeURIComponent(result.text)}&user=${encodeURIComponent(namaUser)}`)
+            .then(response => response.text())
+            .then(responseText => {
+               document.getElementById("status-pesan").innerText = responseText;
+               alert(responseText);
+               document.getElementById("status-pesan").innerText = "";
+            })
+            .catch(err => {
+               document.getElementById("status-pesan").innerText = "Gagal mengirim data ke Sheets!";
+               console.error(err);
+            });
+        }
         
-        // Hentikan video stream agar tidak mengirim data berkali-kali ke Sheets
-        hentikanKameraLive();
-        document.getElementById("status-pesan").innerText = "Sedang mencatat data...";
+        // Memastikan status tulisan kembali normal saat kamera menyala
+        if (elemenVideo.srcObject && document.getElementById("status-pesan").innerText === "Menghubungkan ke lensa kamera...") {
+          document.getElementById("status-pesan").innerText = "Arahkan kamera ke Barcode/QR Code";
+        }
 
-        // Mengirimkan hasil scan langsung ke Google Sheets via Fetch API
-        fetch(`${URL_APPS_SCRIPT}?id_alat=${encodeURIComponent(result.text)}&user=${encodeURIComponent(namaUser)}`)
-          .then(response => response.text())
-          .then(responseText => {
-             document.getElementById("status-pesan").innerText = responseText;
-             alert(responseText);
-             document.getElementById("status-pesan").innerText = "";
-          })
-          .catch(err => {
-             document.getElementById("status-pesan").innerText = "Gagal mengirim data ke Sheets!";
-             console.error(err);
-          });
-      }
-      if (error && !(error instanceof ZXing.NotFoundException)) {
-        console.error("Eror Scanner:", error);
-      }
-    });
-  }
-
-  function hentikanKameraLive() {
-    if (kontrolKamera) {
-      kontrolKamera.stop(); // Mematikan lampu lensa dan aliran video stream
-      kontrolKamera = null;
+        if (error && !(error instanceof ZXing.NotFoundException)) {
+          console.error("Eror Scanner:", error);
+        }
+      });
+    } catch (err) {
+      document.getElementById("status-pesan").innerText = "Lensa ini sibuk/terkunci. Coba pilih kamera lain di menu!";
+      console.error(err);
     }
-    document.getElementById("scanner-container").style.display = "none";
-    document.getElementById("sourceSelect").style.display = "none";
-    document.getElementById("btn-start").style.display = "inline-block";
-    document.getElementById("btn-stop").style.display = "none";
-    document.getElementById("status-pesan").innerText = "";
   }
-</script>
-</body>
-</html>
