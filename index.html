@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Scan Barcode Alat</title>
+  <!-- PERBAIKAN: Menggunakan Library Pemindai Versi Ringan dan Stabil -->
   <script src="https://unpkg.com"></script>
   <style>
     body { font-family: Arial, sans-serif; background-color: #F5F5F5; text-align: center; padding: 20px; }
@@ -29,33 +30,28 @@
 </div>
 
 <script>
-  let html5QrcodeScanner;
+  let html5QrCode;
   
-  // PENTING: GANTI URL DI BAWAH INI DENGAN LINK URL /exec APPS SCRIPT ANDA
-  const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyes3QBML2a9Rne8LDujydrIv0v6f-g2QIGwDfwVDi9H808zQrOSoH9d9dS3fybVOYk-w/exec";
+  // URL milik Anda sudah terpasang dengan aman di bawah ini:
+  const URL_APPS_SCRIPT = "https://google.com";
 
   function onScanSuccess(decodedText, decodedResult) {
     let namaUser = document.getElementById("username").value;
-    if (!namaUser) {
-      alert("Isi Nama Pengguna Terlebih Dahulu!");
-      return;
-    }
     
-    if (html5QrcodeScanner) {
-      html5QrcodeScanner.clear().catch(err => console.error(err));
+    if (html5QrCode) {
+      html5QrCode.stop().then(() => {
+        document.getElementById("reader").style.display = "none";
+        document.getElementById("scan-btn").style.display = "inline-block";
+      }).catch(err => console.error(err));
     }
     
     document.getElementById("status-pesan").innerText = "Sedang mencatat data...";
     
-    // Mengirim data ke Google Sheets menggunakan metode fetch (Bebas Sandbox Google)
     fetch(`${URL_APPS_SCRIPT}?id_alat=${encodeURIComponent(decodedText)}&user=${encodeURIComponent(namaUser)}`)
       .then(response => response.text())
       .then(responseText => {
          document.getElementById("status-pesan").innerText = responseText;
          alert(responseText);
-         
-         document.getElementById("reader").style.display = "none";
-         document.getElementById("scan-btn").style.display = "inline-block";
          document.getElementById("status-pesan").innerText = "";
       })
       .catch(error => {
@@ -64,6 +60,7 @@
       });
   }
 
+  // PERBAIKAN UTAMA: Menggunakan Sistem Pemanggilan Kamera Belakang Secara Paksa (Bypass Overconstrained)
   function startScanner() {
     let namaUser = document.getElementById("username").value;
     if (!namaUser) {
@@ -73,17 +70,24 @@
 
     document.getElementById("scan-btn").style.display = "none";
     document.getElementById("reader").style.display = "block";
-    document.getElementById("status-pesan").innerText = "Membuka kamera...";
+    document.getElementById("status-pesan").innerText = "Mengaktifkan kamera belakang...";
 
-    html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-      fps: 10, 
-      qrbox: 250,
-      supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
-    });
-    html5QrcodeScanner.render(onScanSuccess, onScanError);
+    // Menginisialisasi ulang sistem kamera murni HTML5
+    html5QrCode = new Html5Qrcode("reader");
+    
+    // Memberikan delay 300ms agar browser Chrome/Safari sempat memuat modul hardware HP
+    setTimeout(() => {
+      html5QrCode.start(
+        { facingMode: "environment" }, // Memaksa lensa kamera belakang aktif
+        { fps: 10, qrbox: 250 },
+        onScanSuccess,
+        (errorMessage) => { /* Mengabaikan log pelacakan fokus */ }
+      ).catch(err => {
+        document.getElementById("status-pesan").innerText = "Gagal membuka kamera. Cek izin browser!";
+        console.error(err);
+      });
+    }, 300);
   }
-
-  function onScanError(errorMessage) {}
 </script>
 </body>
 </html>
