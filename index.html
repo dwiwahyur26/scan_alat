@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scan Barcode Alat</title>
+  <script src="https://unpkg.com"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #F5F5F5; text-align: center; padding: 20px; }
+    .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 20px; }
+    h2 { color: #2F52CD; margin-bottom: 5px; }
+    input { width: 80%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; text-align: center; font-size: 16px; box-sizing: border-box; }
+    #reader { width: 100%; border-radius: 12px; overflow: hidden; margin-top: 15px; background: #eee; min-height: 250px; display: none; }
+    .status { color: #2F52CD; font-weight: bold; margin-top: 15px; font-size: 16px; }
+    .btn-scan { background-color: #2F52CD; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 80%; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>PEMAKAIAN ALAT</h2>
+  <p style="font-family: monospace; font-weight: bold; color: #555;">Input and Scan</p>
+  
+  <input type="text" id="username" placeholder="Input your name">
+  <button id="scan-btn" class="btn-scan" onclick="startScanner()">📷 Mulai Scan Barcode</button>
+  
+  <div id="reader"></div>
+  <div id="status-pesan" class="status"></div>
+</div>
+
+<script>
+  let html5QrcodeScanner;
+  
+  // PENTING: GANTI URL DI BAWAH INI DENGAN LINK URL /exec APPS SCRIPT ANDA
+  const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyes3QBML2a9Rne8LDujydrIv0v6f-g2QIGwDfwVDi9H808zQrOSoH9d9dS3fybVOYk-w/exec";
+
+  function onScanSuccess(decodedText, decodedResult) {
+    let namaUser = document.getElementById("username").value;
+    if (!namaUser) {
+      alert("Isi Nama Pengguna Terlebih Dahulu!");
+      return;
+    }
+    
+    if (html5QrcodeScanner) {
+      html5QrcodeScanner.clear().catch(err => console.error(err));
+    }
+    
+    document.getElementById("status-pesan").innerText = "Sedang mencatat data...";
+    
+    // Mengirim data ke Google Sheets menggunakan metode fetch (Bebas Sandbox Google)
+    fetch(`${URL_APPS_SCRIPT}?id_alat=${encodeURIComponent(decodedText)}&user=${encodeURIComponent(namaUser)}`)
+      .then(response => response.text())
+      .then(responseText => {
+         document.getElementById("status-pesan").innerText = responseText;
+         alert(responseText);
+         
+         document.getElementById("reader").style.display = "none";
+         document.getElementById("scan-btn").style.display = "inline-block";
+         document.getElementById("status-pesan").innerText = "";
+      })
+      .catch(error => {
+         document.getElementById("status-pesan").innerText = "Gagal mencatat data!";
+         console.error(error);
+      });
+  }
+
+  function startScanner() {
+    let namaUser = document.getElementById("username").value;
+    if (!namaUser) {
+      alert("Isi Nama Pengguna Terlebih Dahulu!");
+      return;
+    }
+
+    document.getElementById("scan-btn").style.display = "none";
+    document.getElementById("reader").style.display = "block";
+    document.getElementById("status-pesan").innerText = "Membuka kamera...";
+
+    html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+      fps: 10, 
+      qrbox: 250,
+      supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
+    });
+    html5QrcodeScanner.render(onScanSuccess, onScanError);
+  }
+
+  function onScanError(errorMessage) {}
+</script>
+</body>
+</html>
