@@ -1,32 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scan Barcode Alat Live</title>
+  <!-- MENGGUNAKAN LIBRARY RESMI ZXING BROWSER YANG PALING STABIL UNTUK HP -->
+  <script type="text/javascript" src="https://unpkg.com"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #F5F5F5; text-align: center; padding: 20px; }
+    .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 20px; }
+    h2 { color: #2F52CD; margin-bottom: 5px; }
+    input[type="text"] { width: 80%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; text-align: center; font-size: 16px; box-sizing: border-box; }
+    .status { color: #2F52CD; font-weight: bold; margin-top: 15px; font-size: 16px; min-height: 24px; }
+    .btn-scan { background-color: #2F52CD; color: white; padding: 14px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 80%; margin-top: 10px; }
+    .btn-danger { background-color: #d9534f; }
+    
+    #scanner-container { width: 100%; border-radius: 12px; overflow: hidden; margin-top: 15px; background: #000; display: none; }
+    video { width: 100%; height: auto; display: block; }
+    select { width: 80%; padding: 8px; margin-top: 10px; border-radius: 6px; font-size: 14px; display: none; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>PEMAKAIAN ALAT</h2>
+  <p style="font-family: monospace; font-weight: bold; color: #555;">Live Video Scanner</p>
+  
+  <input type="text" id="username" placeholder="Input your name">
+  
+  <button id="btn-start" class="btn-scan" onclick="inisialisasiKameraLive()">📷 Mulai Scan Kamera</button>
+  <button id="btn-stop" class="btn-scan btn-danger" onclick="hentikanKameraLive()" style="display: none;">🛑 Matikan Kamera</button>
+  
+  <select id="sourceSelect" onchange="gantiKamera(this.value)"></select>
+  
+  <div id="scanner-container">
+    <video id="video-preview"></video>
+  </div>
+  
+  <div id="status-pesan" class="status"></div>
+</div>
+
+<script>
+  const URL_APPS_SCRIPT = "https://google.com";
+
+  // Memanggil objek pembaca multi format dari pustaka zxing browser
+  const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+  let kontrolKamera = null;
+
+  async function inisialisasiKameraLive() {
+    let namaUser = document.getElementById("username").value;
+    if (!namaUser) {
+      alert("Isi Nama Pengguna Terlebih Dahulu!");
+      return;
+    }
+
+    document.getElementById("status-pesan").innerText = "Meminta izin akses kamera...";
+    
+    try {
+      const daftarKamera = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
+      
+      if (daftarKamera.length === 0) {
+        document.getElementById("status-pesan").innerText = "Kamera tidak ditemukan!";
+        return;
+      }
+
+      document.getElementById("scanner-container").style.display = "block";
+      document.getElementById("btn-start").style.display = "none";
+      document.getElementById("btn-stop").style.display = "inline-block";
+
+      const menuKamera = document.getElementById('sourceSelect');
+      menuKamera.innerHTML = '';
+      
+      if (daftarKamera.length > 1) {
+        menuKamera.style.display = 'inline-block';
+        daftarKamera.forEach((device, index) => {
+          const opsi = document.createElement('option');
+          opsi.value = device.deviceId;
+          opsi.text = device.label || `Kamera ${index + 1}`;
+          
+          // Mengutamakan otomatis memilih lensa belakang
+          if (device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('environment') || device.label.toLowerCase().includes('belakang')) {
+            opsi.selected = true;
+          }
+          menuKamera.appendChild(opsi);
+        });
+      }
+
+      gantiKamera(menuKamera.value || daftarKamera[0].deviceId);
+
+    } catch (error) {
+      document.getElementById("status-pesan").innerText = "Gagal membuka kamera!";
+      console.error(error);
+    }
+  }
+
   async function gantiKamera(deviceId) {
     if (kontrolKamera) { kontrolKamera.stop(); }
 
     const elemenVideo = document.getElementById('video-preview');
     let namaUser = document.getElementById("username").value;
 
-    // PERBAIKAN UTAMA: Mengunci resolusi standar agar video tidak blank hitam di HP
-    const opsiKoneksi = {
-      deviceId: deviceId,
-      modifiers: {
-        constraints: {
-          video: {
-            deviceId: deviceId,
-            facingMode: "environment",
-            width: { ideal: 640 },
-            height: { ideal: 480 }
-          },
-          audio: false
-        }
+    // STRATEGI PENYELAMATAN: Memaksa batasan resolusi standar agar video tidak blank hitam di HP
+    const batasanKamera = {
+      video: {
+        deviceId: { exact: deviceId },
+        width: { ideal: 640 },
+        height: { ideal: 480 }
       }
     };
 
-    document.getElementById("status-pesan").innerText = "Menghubungkan ke lensa kamera...";
+    document.getElementById("status-pesan").innerText = "Menghubungkan aliran video...";
 
     try {
-      // Menjalankan proses scanning dengan resolusi yang sudah dikunci aman
-      kontrolKamera = await codeReader.decodeFromVideoDevice(opsiKoneksi, elemenVideo, (result, error) => {
+      // Membaca video stream live menggunakan constraints resolusi yang dikunci
+      kontrolKamera = await codeReader.decodeFromConstraints(batasanKamera, elemenVideo, (result, error) => {
         if (result) {
-          console.log("Terbaca:", result.text);
           hentikanKameraLive();
           document.getElementById("status-pesan").innerText = "Sedang mencatat data...";
 
@@ -43,17 +131,27 @@
             });
         }
         
-        // Memastikan status tulisan kembali normal saat kamera menyala
-        if (elemenVideo.srcObject && document.getElementById("status-pesan").innerText === "Menghubungkan ke lensa kamera...") {
+        if (elemenVideo.srcObject) {
           document.getElementById("status-pesan").innerText = "Arahkan kamera ke Barcode/QR Code";
-        }
-
-        if (error && !(error instanceof ZXing.NotFoundException)) {
-          console.error("Eror Scanner:", error);
         }
       });
     } catch (err) {
-      document.getElementById("status-pesan").innerText = "Lensa ini sibuk/terkunci. Coba pilih kamera lain di menu!";
+      document.getElementById("status-pesan").innerText = "Lensa ini sibuk. Harap pilih tipe kamera lain di menu dropdown!";
       console.error(err);
     }
   }
+
+  function hentikanKameraLive() {
+    if (kontrolKamera) {
+      kontrolKamera.stop();
+      kontrolKamera = null;
+    }
+    document.getElementById("scanner-container").style.display = "none";
+    document.getElementById("sourceSelect").style.display = "none";
+    document.getElementById("btn-start").style.display = "inline-block";
+    document.getElementById("btn-stop").style.display = "none";
+    document.getElementById("status-pesan").innerText = "";
+  }
+</script>
+</body>
+</html>
