@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Scan Barcode Alat</title>
-  <!-- PERBAIKAN: Menggunakan Library Pemindai Versi Ringan dan Stabil -->
+  <!-- Memanggil library decoder gambar barcode resmi -->
   <script src="https://unpkg.com"></script>
   <style>
     body { font-family: Arial, sans-serif; background-color: #F5F5F5; text-align: center; padding: 20px; }
     .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 20px; }
     h2 { color: #2F52CD; margin-bottom: 5px; }
-    input { width: 80%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; text-align: center; font-size: 16px; box-sizing: border-box; }
-    #reader { width: 100%; border-radius: 12px; overflow: hidden; margin-top: 15px; background: #eee; min-height: 250px; display: none; }
+    input[type="text"] { width: 80%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 8px; text-align: center; font-size: 16px; box-sizing: border-box; }
     .status { color: #2F52CD; font-weight: bold; margin-top: 15px; font-size: 16px; }
-    .btn-scan { background-color: #2F52CD; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 80%; margin-top: 10px; }
+    .btn-scan { background-color: #2F52CD; color: white; padding: 14px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 80%; margin-top: 10px; display: inline-block; }
+    #hidden-input { display: none; }
   </style>
 </head>
 <body>
@@ -23,70 +23,62 @@
   <p style="font-family: monospace; font-weight: bold; color: #555;">Input and Scan</p>
   
   <input type="text" id="username" placeholder="Input your name">
-  <button id="scan-btn" class="btn-scan" onclick="startScanner()">📷 Mulai Scan Barcode</button>
   
-  <div id="reader"></div>
+  <!-- Tombol pemicu kamera native HP yang dijamin 100% diizinkan oleh Android & iOS -->
+  <button class="btn-scan" onclick="pemicuKameraHP()">📷 Ambil Foto Barcode</button>
+  
+  <!-- Input tersembunyi untuk memanggil kamera bawaan sistem HP -->
+  <input type="file" id="hidden-input" accept="image/*" capture="environment" onchange="prosesGambarBarcode(event)">
+  
   <div id="status-pesan" class="status"></div>
 </div>
 
 <script>
-  let html5QrCode;
-  
-  // URL milik Anda sudah terpasang dengan aman di bawah ini:
+  // URL exec Apps Script Anda yang valid
   const URL_APPS_SCRIPT = "https://google.com";
 
-  function onScanSuccess(decodedText, decodedResult) {
-    let namaUser = document.getElementById("username").value;
-    
-    if (html5QrCode) {
-      html5QrCode.stop().then(() => {
-        document.getElementById("reader").style.display = "none";
-        document.getElementById("scan-btn").style.display = "inline-block";
-      }).catch(err => console.error(err));
-    }
-    
-    document.getElementById("status-pesan").innerText = "Sedang mencatat data...";
-    
-    fetch(`${URL_APPS_SCRIPT}?id_alat=${encodeURIComponent(decodedText)}&user=${encodeURIComponent(namaUser)}`)
-      .then(response => response.text())
-      .then(responseText => {
-         document.getElementById("status-pesan").innerText = responseText;
-         alert(responseText);
-         document.getElementById("status-pesan").innerText = "";
-      })
-      .catch(error => {
-         document.getElementById("status-pesan").innerText = "Gagal mencatat data!";
-         console.error(error);
-      });
-  }
-
-  // PERBAIKAN UTAMA: Menggunakan Sistem Pemanggilan Kamera Belakang Secara Paksa (Bypass Overconstrained)
-  function startScanner() {
+  function pemicuKameraHP() {
     let namaUser = document.getElementById("username").value;
     if (!namaUser) {
       alert("Isi Nama Pengguna Terlebih Dahulu!");
       return;
     }
+    // Klik otomatis input file kamera native
+    document.getElementById("hidden-input").click();
+  }
 
-    document.getElementById("scan-btn").style.display = "none";
-    document.getElementById("reader").style.display = "block";
-    document.getElementById("status-pesan").innerText = "Mengaktifkan kamera belakang...";
+  function prosesGambarBarcode(event) {
+    let namaUser = document.getElementById("username").value;
+    const file = event.target.files[0];
+    if (!file) return;
 
-    // Menginisialisasi ulang sistem kamera murni HTML5
-    html5QrCode = new Html5Qrcode("reader");
-    
-    // Memberikan delay 300ms agar browser Chrome/Safari sempat memuat modul hardware HP
-    setTimeout(() => {
-      html5QrCode.start(
-        { facingMode: "environment" }, // Memaksa lensa kamera belakang aktif
-        { fps: 10, qrbox: 250 },
-        onScanSuccess,
-        (errorMessage) => { /* Mengabaikan log pelacakan fokus */ }
-      ).catch(err => {
-        document.getElementById("status-pesan").innerText = "Gagal membuka kamera. Cek izin browser!";
-        console.error(err);
+    document.getElementById("status-pesan").innerText = "Membaca gambar barcode...";
+
+    // Membaca dan menterjemahkan kode barcode dari gambar jepretan kamera
+    const html5QrCode = new Html5Qrcode("hidden-input");
+    html5QrCode.scanFile(file, true)
+      .then(decodedText => {
+        document.getElementById("status-pesan").innerText = "Sedang mencatat data...";
+        
+        // Kirim hasil teks ke Google Sheets via Fetch API
+        fetch(`${URL_APPS_SCRIPT}?id_alat=${encodeURIComponent(decodedText)}&user=${encodeURIComponent(namaUser)}`)
+          .then(response => response.text())
+          .then(responseText => {
+             document.getElementById("status-pesan").innerText = responseText;
+             alert(responseText);
+             document.getElementById("status-pesan").innerText = "";
+             document.getElementById("hidden-input").value = ""; // Reset input
+          })
+          .catch(error => {
+             document.getElementById("status-pesan").innerText = "Gagal mengirim data ke Sheets!";
+             console.error(error);
+          });
+      })
+      .catch(err => {
+        document.getElementById("status-pesan").innerText = "Barcode tidak terdeteksi! Pastikan gambar fokus dan jelas.";
+        alert("Gagal membaca barcode. Pastikan foto tegak lurus, fokus, dan dekat dengan objek!");
+        document.getElementById("hidden-input").value = "";
       });
-    }, 300);
   }
 </script>
 </body>
