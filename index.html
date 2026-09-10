@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Scan Barcode Alat Live</title>
-  <!-- MENGGUNAKAN LIBRARY RESMI ZXING BROWSER YANG PALING STABIL UNTUK HP -->
+  <!-- MENGGUNAKAN LIBRARY ZXING BROWSER VERSI STABIL -->
   <script type="text/javascript" src="https://unpkg.com"></script>
   <style>
     body { font-family: Arial, sans-serif; background-color: #F5F5F5; text-align: center; padding: 20px; }
@@ -17,7 +17,6 @@
     
     #scanner-container { width: 100%; border-radius: 12px; overflow: hidden; margin-top: 15px; background: #000; display: none; }
     video { width: 100%; height: auto; display: block; }
-    select { width: 80%; padding: 8px; margin-top: 10px; border-radius: 6px; font-size: 14px; display: none; }
   </style>
 </head>
 <body>
@@ -31,10 +30,8 @@
   <button id="btn-start" class="btn-scan" onclick="inisialisasiKameraLive()">📷 Mulai Scan Kamera</button>
   <button id="btn-stop" class="btn-scan btn-danger" onclick="hentikanKameraLive()" style="display: none;">🛑 Matikan Kamera</button>
   
-  <select id="sourceSelect" onchange="gantiKamera(this.value)"></select>
-  
   <div id="scanner-container">
-    <video id="video-preview"></video>
+    <video id="video-preview" playsinline></video>
   </div>
   
   <div id="status-pesan" class="status"></div>
@@ -43,7 +40,6 @@
 <script>
   const URL_APPS_SCRIPT = "https://google.com";
 
-  // Memanggil objek pembaca multi format dari pustaka zxing browser
   const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
   let kontrolKamera = null;
 
@@ -56,63 +52,25 @@
 
     document.getElementById("status-pesan").innerText = "Meminta izin akses kamera...";
     
-    try {
-      const daftarKamera = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
-      
-      if (daftarKamera.length === 0) {
-        document.getElementById("status-pesan").innerText = "Kamera tidak ditemukan!";
-        return;
-      }
+    // PERBAIKAN TOTAL: Memaksa browser HP meminta izin kamera belakang secara langsung tanpa mendata lensa
+    const batasanKamera = {
+      video: {
+        facingMode: { ideal: "environment" }, // Memaksa lensa kamera belakang HP menyala
+        width: { ideal: 640 },
+        height: { ideal: 480 }
+      },
+      audio: false
+    };
 
+    try {
+      // Membuka jendela tampilan container video
       document.getElementById("scanner-container").style.display = "block";
       document.getElementById("btn-start").style.display = "none";
       document.getElementById("btn-stop").style.display = "inline-block";
 
-      const menuKamera = document.getElementById('sourceSelect');
-      menuKamera.innerHTML = '';
-      
-      if (daftarKamera.length > 1) {
-        menuKamera.style.display = 'inline-block';
-        daftarKamera.forEach((device, index) => {
-          const opsi = document.createElement('option');
-          opsi.value = device.deviceId;
-          opsi.text = device.label || `Kamera ${index + 1}`;
-          
-          // Mengutamakan otomatis memilih lensa belakang
-          if (device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('environment') || device.label.toLowerCase().includes('belakang')) {
-            opsi.selected = true;
-          }
-          menuKamera.appendChild(opsi);
-        });
-      }
+      const elemenVideo = document.getElementById('video-preview');
 
-      gantiKamera(menuKamera.value || daftarKamera[0].deviceId);
-
-    } catch (error) {
-      document.getElementById("status-pesan").innerText = "Gagal membuka kamera!";
-      console.error(error);
-    }
-  }
-
-  async function gantiKamera(deviceId) {
-    if (kontrolKamera) { kontrolKamera.stop(); }
-
-    const elemenVideo = document.getElementById('video-preview');
-    let namaUser = document.getElementById("username").value;
-
-    // STRATEGI PENYELAMATAN: Memaksa batasan resolusi standar agar video tidak blank hitam di HP
-    const batasanKamera = {
-      video: {
-        deviceId: { exact: deviceId },
-        width: { ideal: 640 },
-        height: { ideal: 480 }
-      }
-    };
-
-    document.getElementById("status-pesan").innerText = "Menghubungkan aliran video...";
-
-    try {
-      // Membaca video stream live menggunakan constraints resolusi yang dikunci
+      // Memulai pemindaian kode secara berkelanjutan
       kontrolKamera = await codeReader.decodeFromConstraints(batasanKamera, elemenVideo, (result, error) => {
         if (result) {
           hentikanKameraLive();
@@ -135,9 +93,14 @@
           document.getElementById("status-pesan").innerText = "Arahkan kamera ke Barcode/QR Code";
         }
       });
-    } catch (err) {
-      document.getElementById("status-pesan").innerText = "Lensa ini sibuk. Harap pilih tipe kamera lain di menu dropdown!";
-      console.error(err);
+
+    } catch (error) {
+      document.getElementById("status-pesan").innerText = "Gagal membuka kamera!";
+      document.getElementById("scanner-container").style.display = "none";
+      document.getElementById("btn-start").style.display = "inline-block";
+      document.getElementById("btn-stop").style.display = "none";
+      console.error(error);
+      alert("Browser menolak membuka kamera. Silakan periksa pengaturan privasi kamera di HP Anda.");
     }
   }
 
@@ -147,7 +110,6 @@
       kontrolKamera = null;
     }
     document.getElementById("scanner-container").style.display = "none";
-    document.getElementById("sourceSelect").style.display = "none";
     document.getElementById("btn-start").style.display = "inline-block";
     document.getElementById("btn-stop").style.display = "none";
     document.getElementById("status-pesan").innerText = "";
